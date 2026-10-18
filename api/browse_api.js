@@ -3,7 +3,13 @@ const { createClient } = require('@supabase/supabase-js');
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://gbbyvbylbnskksxpwnth.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiYnl2YnlsYm5za2tzeHB3bnRoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjEyODYwNywiZXhwIjoyMTA3NzA0NjA3fQ.JNNqf77NMCR0F3L1pavcQhyWZ96IM-JRlz2WGL32FqQ';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Initialize Supabase with explicit header options to prevent URL-parsing issues with keys
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false },
+  global: {
+    headers: { 'apikey': SUPABASE_KEY }
+  }
+});
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -100,3 +106,4 @@ module.exports = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
