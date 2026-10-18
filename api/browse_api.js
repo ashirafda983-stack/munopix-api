@@ -1,7 +1,7 @@
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://gbbyvbylbnskksxpwnth.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiYnl2YnlsYm5za2tzeHB3bnRoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjEyODYwNywiZXhwIjoyMTA3NzA0NjA3fQ.JNNqf77NMCR0F3L1pavcQhyWZ96IM-JRlz2WGL32FqQ';
+const SUPABASE_URL = 'https://gbbyvbylbnskksxpwnth.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiYnl2YnlsYm5za2tzeHB3bnRoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjEyODYwNywiZXhwIjoyMTA3NzA0NjA3fQ.JNNqf77NMCR0F3L1pavcQhyWZ96IM-JRlz2WGL32FqQ';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -111,5 +111,4 @@ module.exports = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
-};
-
+}
