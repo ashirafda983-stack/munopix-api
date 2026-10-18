@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/browse_api.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/api/browse_api", "destination": "/api/browse_api.js" }
+  ]
+}
