@@ -1,0 +1,9 @@
+{
+  "name": "munopix-custom-api",
+  "version": "1.0.0",
+  "description": "Custom PearlFlix API connected to Supabase",
+  "main": "api/browse_api.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
