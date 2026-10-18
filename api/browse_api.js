@@ -1,15 +1,7 @@
-const { createClient } = require('@supabase/supabase-js');
+const fetch = require('node-fetch');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://gbbyvbylbnskksxpwnth.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiYnl2YnlsYm5za2tzeHB3bnRoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjEyODYwNywiZXhwIjoyMTA3NzA0NjA3fQ.JNNqf77NMCR0F3L1pavcQhyWZ96IM-JRlz2WGL32FqQ';
-
-// Initialize Supabase with explicit header options to prevent URL-parsing issues with keys
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false },
-  global: {
-    headers: { 'apikey': SUPABASE_KEY }
-  }
-});
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,12 +15,19 @@ module.exports = async (req, res) => {
   const { q, type, genre, vj, tag, page = 1, perPage = 20, filters } = req.query;
 
   try {
-    if (filters === '1') {
-      const { data: mediaItems, error } = await supabase
-        .from('media_library')
-        .select('genres, vjs');
+    const headers = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    };
 
-      if (error) throw error;
+    if (filters === '1') {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/media_library?select=genres,vjs`, { headers });
+      const mediaItems = await response.json();
+
+      if (!Array.isArray(mediaItems)) {
+        throw new Error(JSON.stringify(mediaItems));
+      }
 
       const genresSet = new Set();
       const vjsSet = new Set();
@@ -50,30 +49,40 @@ module.exports = async (req, res) => {
     const p = parseInt(page) || 1;
     const pp = parseInt(perPage) || 20;
     const offset = (p - 1) * pp;
+    const limit = pp;
 
-    let query = supabase
-      .from('media_library')
-      .select('*, episodes(*)', { count: 'exact' });
+    // Build PostgREST query URL with embedded episodes
+    let targetUrl = `${SUPABASE_URL}/rest/v1/media_library?select=*,episodes(*)&order=created_at.desc&offset=${offset}&limit=${limit}`;
 
     if (q && q.trim() !== '') {
-      query = query.or(`title.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
+      const queryStr = q.trim();
+      targetUrl += `&or=(title.ilike.*${queryStr}*,description.ilike.*${queryStr}*)`;
     }
     if (type && type.trim() !== '') {
-      query = query.eq('content_type', type.trim());
+      targetUrl += `&content_type=eq.${type.trim()}`;
     }
     if (genre && genre.trim() !== '') {
-      query = query.contains('genres', [genre.trim()]);
+      targetUrl += `&genres=cs.{${genre.trim()}}`;
     }
     if (vj && vj.trim() !== '') {
-      query = query.contains('vjs', [vj.trim()]);
+      targetUrl += `&vjs=cs.{${vj.trim()}}`;
     }
 
-    query = query
-      .range(offset, offset + pp - 1)
-      .order('created_at', { ascending: false });
+    const response = await fetch(targetUrl, {
+      headers: { ...headers, 'Range-Unit': 'items', 'Prefer': 'count=exact' }
+    });
 
-    const { data, count, error } = await query;
-    if (error) throw error;
+    const contentRange = response.headers.get('content-range');
+    let totalCount = 0;
+    if (contentRange) {
+      const parts = contentRange.split('/');
+      if (parts.length === 2) totalCount = parseInt(parts[1], 10) || 0;
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error(JSON.stringify(data));
+    }
 
     const items = data.map(item => ({
       id: item.id,
@@ -97,8 +106,8 @@ module.exports = async (req, res) => {
       success: true,
       page: p,
       perPage: pp,
-      total: count || 0,
-      totalPages: Math.ceil((count || 0) / pp),
+      total: totalCount,
+      totalPages: Math.ceil(totalCount / pp) || 1,
       items
     });
 
@@ -106,4 +115,3 @@ module.exports = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
-
