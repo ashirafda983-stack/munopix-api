@@ -1,5 +1,29 @@
-const SUPABASE_URL = (process.env.SUPABASE_URL || "https://gbbyvbylbnskksxpwnth.supabase.co").trim();
-const SUPABASE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "").trim();
+    return res.status(200).end();
+  }
+
+  const { q, type, genre, vj, tag, page = 1, 
+  perPage = 20, filters, all } = req.query;
+    if (filters === '1') { const response = 
+      await 
+      fetch(`${SUPABASE_URL}/rest/v1/media_library?select=genres,vjs`, 
+      { headers }); const mediaItems = await 
+      response.json();
+
+      const genresSet = new Set(); const 
+      vjsSet = new Set(); if 
+      (Array.isArray(mediaItems)) {
+        mediaItems.forEach(item => { 
+          (item.genres || []).forEach(g => 
+          genresSet.add(g)); (item.vjs || 
+          []).forEach(v => vjsSet.add(v));
+        });
+      }
+
+const rawUrl = process.env.SUPABASE_URL || "https://gbbyvbylbnskksxpwnth.supabase.co";
+const SUPABASE_URL = rawUrl.split('\n')[0].trim();
+
+const rawKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
+const SUPABASE_KEY = rawKey.split('\n')[0].trim();
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
