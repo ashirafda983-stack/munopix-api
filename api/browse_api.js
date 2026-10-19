@@ -1,38 +1,38 @@
-const SUPABASE_URL = 'https://gbbyvbylbnskksxpwnth.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiYnl2YnlsYm5za2tzeHB3bnRoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjEyODYwNywiZXhwIjoyMTA3NzA0NjA3fQ.JNNqf77NMCR0F3L1pavcQhyWZ96IM-JRlz2WGL32FqQ';
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://gbbyvbylbnskksxpwnth.supabase.co";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  const { q, type, genre, vj, tag, page = 1, perPage = 20, filters } = req.query;
+  const { q, type, genre, vj, tag, page = 1, perPage = 20, filters, all } = req.query;
 
   try {
     const headers = {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json'
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json"
     };
 
-    if (filters === '1') {
+    // 1. Handle Filter Options Request (?filters=1)
+    if (filters === "1") {
       const response = await fetch(`${SUPABASE_URL}/rest/v1/media_library?select=genres,vjs`, { headers });
       const mediaItems = await response.json();
 
-      if (!Array.isArray(mediaItems)) {
-        throw new Error(JSON.stringify(mediaItems));
-      }
-
       const genresSet = new Set();
       const vjsSet = new Set();
-      mediaItems.forEach(item => {
-        (item.genres || []).forEach(g => genresSet.add(g));
-        (item.vjs || []).forEach(v => vjsSet.add(v));
-      });
+
+      if (Array.isArray(mediaItems)) {
+        mediaItems.forEach(item => {
+          (item.genres || []).forEach(g => genresSet.add(g));
+          (item.vjs || []).forEach(v => vjsSet.add(v));
+        });
+      }
 
       return res.status(200).json({
         success: true,
@@ -44,44 +44,55 @@ export default async function handler(req, res) {
       });
     }
 
+    // 2. Handle Main Library Listing with Unpaginated Range Support
     const p = parseInt(page) || 1;
     const pp = parseInt(perPage) || 20;
-    const offset = (p - 1) * pp;
-    const limit = pp;
+    const startRange = (all === 'true') ? 0 : (p - 1) * pp;
+    const endRange = (all === 'true') ? 1999 : (startRange + pp - 1);
 
-    let targetUrl = `${SUPABASE_URL}/rest/v1/media_library?select=*,episodes(*)&order=created_at.desc&offset=${offset}&limit=${limit}`;
+    let queryParams = new URLSearchParams();
+    queryParams.append("select", "*,episodes(*)");
+    queryParams.append("order", "created_at.desc");
 
-    if (q && q.trim() !== '') {
-      const queryStr = q.trim();
-      targetUrl += `&or=(title.ilike.*${queryStr}*,description.ilike.*${queryStr}*)`;
+    if (q && q.trim() !== "") {
+      queryParams.append("or", `(title.ilike.*${q.trim()}*,description.ilike.*${q.trim()}*)`);
     }
-    if (type && type.trim() !== '') {
-      targetUrl += `&content_type=eq.${type.trim()}`;
+    if (type && type.trim() !== "") {
+      queryParams.append("content_type", `eq.${type.trim()}`);
     }
-    if (genre && genre.trim() !== '') {
-      targetUrl += `&genres=cs.{${genre.trim()}}`;
+    if (genre && genre.trim() !== "") {
+      queryParams.append("genres", `cs.{${genre.trim()}}`);
     }
-    if (vj && vj.trim() !== '') {
-      targetUrl += `&vjs=cs.{${vj.trim()}}`;
+    if (vj && vj.trim() !== "") {
+      queryParams.append("vjs", `cs.{${vj.trim()}}`);
     }
 
-    const response = await fetch(targetUrl, {
-      headers: { ...headers, 'Range-Unit': 'items', 'Prefer': 'count=exact' }
-    });
+    // Request Range header directly from Supabase REST API
+    const reqHeaders = {
+      ...headers,
+      "Prefer": "count=exact",
+      "Range": `${startRange}-${endRange}`
+    };
 
-    const contentRange = response.headers.get('content-range');
-    let totalCount = 0;
-    if (contentRange) {
-      const parts = contentRange.split('/');
-      if (parts.length === 2) totalCount = parseInt(parts[1], 10) || 0;
+    const fetchUrl = `${SUPABASE_URL}/rest/v1/media_library?${queryParams.toString()}`;
+    const response = await fetch(fetchUrl, { headers: reqHeaders });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Supabase Fetch Error: ${errText}`);
     }
 
     const data = await response.json();
-    if (!Array.isArray(data)) {
-      throw new Error(JSON.stringify(data));
+    const contentRange = response.headers.get("content-range");
+    let totalCount = 0;
+
+    if (contentRange && contentRange.includes("/")) {
+      totalCount = parseInt(contentRange.split("/")[1]) || data.length;
+    } else {
+      totalCount = data.length;
     }
 
-    const items = data.map(item => ({
+    const items = (Array.isArray(data) ? data : []).map(item => ({
       id: item.id,
       title: item.title,
       contentType: item.content_type,
@@ -101,14 +112,15 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      page: p,
-      perPage: pp,
+      page: all === 'true' ? 1 : p,
+      perPage: all === 'true' ? items.length : pp,
       total: totalCount,
-      totalPages: Math.ceil(totalCount / pp) || 1,
+      totalPages: all === 'true' ? 1 : Math.ceil(totalCount / pp),
       items
     });
 
   } catch (err) {
+    console.error("API Error:", err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 }
