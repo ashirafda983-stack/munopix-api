@@ -19,7 +19,6 @@ export default async function handler(req, res) {
       "Content-Type": "application/json"
     };
 
-    // 1. Handle Filter Options Request (?filters=1)
     if (filters === "1") {
       const response = await fetch(`${SUPABASE_URL}/rest/v1/media_library?select=genres,vjs`, { headers });
       const mediaItems = await response.json();
@@ -44,37 +43,35 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2. Handle Main Library Listing with Unpaginated Range Support
     const p = parseInt(page) || 1;
     const pp = parseInt(perPage) || 20;
     const startRange = (all === 'true') ? 0 : (p - 1) * pp;
     const endRange = (all === 'true') ? 1999 : (startRange + pp - 1);
 
-    let queryParams = new URLSearchParams();
-    queryParams.append("select", "*,episodes(*)");
-    queryParams.append("order", "created_at.desc");
+    const params = new URLSearchParams();
+    params.set("select", "*,episodes(*)");
+    params.set("order", "created_at.desc");
 
     if (q && q.trim() !== "") {
-      queryParams.append("or", `(title.ilike.*${q.trim()}*,description.ilike.*${q.trim()}*)`);
+      params.set("or", `(title.ilike.*${q.trim()}*,description.ilike.*${q.trim()}*)`);
     }
     if (type && type.trim() !== "") {
-      queryParams.append("content_type", `eq.${type.trim()}`);
+      params.set("content_type", `eq.${type.trim()}`);
     }
     if (genre && genre.trim() !== "") {
-      queryParams.append("genres", `cs.{${genre.trim()}}`);
+      params.set("genres", `cs.{${genre.trim()}}`);
     }
     if (vj && vj.trim() !== "") {
-      queryParams.append("vjs", `cs.{${vj.trim()}}`);
+      params.set("vjs", `cs.{${vj.trim()}}`);
     }
 
-    // Request Range header directly from Supabase REST API
     const reqHeaders = {
       ...headers,
       "Prefer": "count=exact",
       "Range": `${startRange}-${endRange}`
     };
 
-    const fetchUrl = `${SUPABASE_URL}/rest/v1/media_library?${queryParams.toString()}`;
+    const fetchUrl = `${SUPABASE_URL}/rest/v1/media_library?${params.toString()}`;
     const response = await fetch(fetchUrl, { headers: reqHeaders });
 
     if (!response.ok) {
@@ -123,4 +120,3 @@ export default async function handler(req, res) {
     console.error("API Error:", err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
-}
