@@ -1,12 +1,7 @@
-const { createClient } = require('@supabase/supabase-js');
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://gbbyvbylbnskksxpwnth.supabase.co";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
 
 module.exports = async (req, res) => {
-  // Enable CORS for your frontend
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -18,20 +13,24 @@ module.exports = async (req, res) => {
   const { q, type, genre, vj, tag, page = 1, perPage = 20, filters, all } = req.query;
 
   try {
-    // 1. Handle filter options request (?filters=1)
-    if (filters === '1') {
-      const { data: mediaItems, error } = await supabase
-        .from('media_library')
-        .select('genres, vjs');
+    const headers = {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json"
+    };
 
-      if (error) throw error;
+    if (filters === '1') {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/media_library?select=genres,vjs`, { headers });
+      const mediaItems = await response.json();
 
       const genresSet = new Set();
       const vjsSet = new Set();
-      mediaItems.forEach(item => {
-        (item.genres || []).forEach(g => genresSet.add(g));
-        (item.vjs || []).forEach(v => vjsSet.add(v));
-      });
+      if (Array.isArray(mediaItems)) {
+        mediaItems.forEach(item => {
+          (item.genres || []).forEach(g => genresSet.add(g));
+          (item.vjs || []).forEach(v => vjsSet.add(v));
+        });
+      }
 
       return res.status(200).json({
         success: true,
@@ -43,42 +42,52 @@ module.exports = async (req, res) => {
       });
     }
 
-    // 2. Handle main library listing, search, and pagination
     const p = parseInt(page) || 1;
     const pp = parseInt(perPage) || 20;
-    const offset = (p - 1) * pp;
+    const startRange = (all === 'true') ? 0 : (p - 1) * pp;
+    const endRange = (all === 'true') ? 1999 : (startRange + pp - 1);
 
-    let query = supabase
-      .from('media_library')
-      .select('*, episodes(*)', { count: 'exact' });
+    const queryParams = new URLSearchParams();
+    queryParams.set("select", "*,episodes(*)");
+    queryParams.set("order", "created_at.desc");
 
     if (q && q.trim() !== '') {
-      query = query.or(`title.ilike.%${q.trim()}%,description.ilike.%${q.trim()}%`);
+      queryParams.set("or", `(title.ilike.*${q.trim()}*,description.ilike.*${q.trim()}*)`);
     }
     if (type && type.trim() !== '') {
-      query = query.eq('content_type', type.trim());
+      queryParams.set("content_type", `eq.${type.trim()}`);
     }
     if (genre && genre.trim() !== '') {
-      query = query.contains('genres', [genre.trim()]);
+      queryParams.set("genres", `cs.{${genre.trim()}}`);
     }
     if (vj && vj.trim() !== '') {
-      query = query.contains('vjs', [vj.trim()]);
+      queryParams.set("vjs", `cs.{${vj.trim()}}`);
     }
 
-    // SAFE UNPAGINATED RANGE FOR ALL=TRUE (Bypasses limits without timing out)
-    if (all === 'true') {
-      query = query.range(0, 1999);
+    const reqHeaders = {
+      ...headers,
+      "Prefer": "count=exact",
+      "Range": `${startRange}-${endRange}`
+    };
+
+    const fetchUrl = `${SUPABASE_URL}/rest/v1/media_library?${queryParams.toString()}`;
+    const response = await fetch(fetchUrl, { headers: reqHeaders });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Supabase Error: ${errText}`);
+    }
+
+    const data = await response.json();
+    const contentRange = response.headers.get("content-range");
+    let totalCount = 0;
+    if (contentRange && contentRange.includes("/")) {
+      totalCount = parseInt(contentRange.split("/")[1]) || data.length;
     } else {
-      query = query.range(offset, offset + pp - 1);
+      totalCount = data.length;
     }
 
-    query = query.order('created_at', { ascending: false });
-
-    const { data, count, error } = await query;
-
-    if (error) throw error;
-
-    const items = data.map(item => ({
+    const items = (Array.isArray(data) ? data : []).map(item => ({
       id: item.id,
       title: item.title,
       contentType: item.content_type,
@@ -100,8 +109,8 @@ module.exports = async (req, res) => {
       success: true,
       page: all === 'true' ? 1 : p,
       perPage: all === 'true' ? items.length : pp,
-      total: count || 0,
-      totalPages: all === 'true' ? 1 : Math.ceil((count || 0) / pp),
+      total: totalCount,
+      totalPages: all === 'true' ? 1 : Math.ceil(totalCount / pp),
       items
     });
 
