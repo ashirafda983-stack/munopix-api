@@ -1,5 +1,5 @@
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://gbbyvbylbnskksxpwnth.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
+const SUPABASE_URL = (process.env.SUPABASE_URL || "https://gbbyvbylbnskksxpwnth.supabase.co").trim();
+const SUPABASE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "").trim();
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
